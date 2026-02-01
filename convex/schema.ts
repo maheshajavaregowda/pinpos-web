@@ -188,18 +188,73 @@ export default defineSchema({
         storeId: v.id("stores"),
         categoryId: v.id("menuCategories"),
         name: v.string(),
+        shortCode: v.optional(v.string()),
+        shortCode2: v.optional(v.string()),
         description: v.optional(v.string()),
         price: v.number(),
         type: itemTypeValidator,
         isAvailable: v.optional(v.boolean()),
+        orderTypes: v.optional(v.array(v.string())),
+        hsnCode: v.optional(v.string()),
+        unit: v.optional(v.string()),
+        ignoreTax: v.optional(v.boolean()),
+        ignoreDiscount: v.optional(v.boolean()),
+        areaWisePricing: v.optional(v.object({
+            homeWebsite: v.optional(v.number()),
+            parcel: v.optional(v.number()),
+            swiggy: v.optional(v.number()),
+            zomato: v.optional(v.number()),
+        })),
         onlineAvailability: v.optional(v.object({
             swiggy: v.boolean(),
             zomato: v.boolean(),
         })),
         imageUrl: v.optional(v.string()),
+        hasVariations: v.optional(v.boolean()),
+        hasAddons: v.optional(v.boolean()),
     })
         .index("by_store", ["storeId"])
-        .index("by_category", ["categoryId"]),
+        .index("by_category", ["categoryId"])
+        .index("by_short_code", ["storeId", "shortCode"]),
+
+    // 6a. Item Variations
+    itemVariations: defineTable({
+        menuItemId: v.id("menuItems"),
+        name: v.string(),
+        price: v.number(),
+        sortOrder: v.number(),
+        isActive: v.boolean(),
+    }).index("by_menu_item", ["menuItemId"]),
+
+    // 6b. Addon Categories
+    addonCategories: defineTable({
+        storeId: v.id("stores"),
+        name: v.string(),
+        selectionType: v.union(v.literal("single"), v.literal("multiple")),
+        minSelection: v.number(),
+        maxSelection: v.number(),
+        sortOrder: v.number(),
+        isActive: v.boolean(),
+    }).index("by_store", ["storeId"]),
+
+    // 6c. Addon Items
+    addonItems: defineTable({
+        categoryId: v.id("addonCategories"),
+        name: v.string(),
+        price: v.number(),
+        sortOrder: v.number(),
+        isActive: v.boolean(),
+    }).index("by_category", ["categoryId"]),
+
+    // 6d. Menu Item Addon Mapping
+    menuItemAddons: defineTable({
+        menuItemId: v.id("menuItems"),
+        addonCategoryId: v.id("addonCategories"),
+        isRequired: v.boolean(),
+        sortOrder: v.number(),
+    })
+        .index("by_menu_item", ["menuItemId"])
+        .index("by_addon_category", ["addonCategoryId"]),
 
     // 7. Orders (Core Transaction)
     orders: defineTable({
@@ -244,11 +299,21 @@ export default defineSchema({
     orderItems: defineTable({
         orderId: v.id("orders"),
         menuItemId: v.id("menuItems"),
-        name: v.string(), // Snapshot
-        price: v.number(), // Snapshot
+        name: v.string(),
+        price: v.number(),
         quantity: v.number(),
         notes: v.optional(v.string()),
         status: orderItemStatusValidator,
+        variationId: v.optional(v.id("itemVariations")),
+        variationName: v.optional(v.string()),
+        variationPrice: v.optional(v.number()),
+        addons: v.optional(v.array(v.object({
+            addonId: v.id("addonItems"),
+            name: v.string(),
+            price: v.number(),
+            quantity: v.number(),
+        }))),
+        itemTotal: v.optional(v.number()),
     }).index("by_order", ["orderId"]),
 
     // 9. Inventory
