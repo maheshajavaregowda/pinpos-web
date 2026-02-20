@@ -1,4 +1,4 @@
 {
-    "prodUrl": "https://befitting-magpie-857.convex.cloud",
-    "functions": "convex/"
+  "prodUrl": "https://warmhearted-marmot-604.convex.cloud",
+  "functions": "../pinpos-backend/convex/"
 }
