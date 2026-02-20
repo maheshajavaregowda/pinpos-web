@@ -5,19 +5,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Package, 
-  Search, 
-  Plus, 
-  Filter, 
-  Bike, 
-  Car, 
+import {
+  Package,
+  Search,
+  Filter,
+  Bike,
+  Car,
+  Zap,
   Circle,
   MoreVertical
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Id } from "@convex/_generated/dataModel";
+import { MenuItemDialog } from "@/features/menu/MenuItemDialog";
 
 export default function Menu() {
   const storeId = localStorage.getItem("pinpos_store_id");
@@ -28,6 +29,7 @@ export default function Menu() {
   const toggleItemAvailability = useMutation(api.menu.toggleAvailability);
   const toggleCategoryAvailability = useMutation(api.menu.toggleCategoryAvailability);
   const updateOnlineAvailability = useMutation(api.menu.updateOnlineAvailability);
+  const createItem = useMutation(api.menu.createItem);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState("all");
@@ -56,12 +58,44 @@ export default function Menu() {
     }
   };
 
-  const handleTogglePlatform = async (itemId: Id<"menuItems">, platform: "swiggy" | "zomato", status: boolean) => {
+  const handleTogglePlatform = async (itemId: Id<"menuItems">, platform: "swiggy" | "zomato" | "rapido", status: boolean) => {
     try {
       await updateOnlineAvailability({ itemId, platform, isAvailable: status });
       toast.success(`${platform.charAt(0).toUpperCase() + platform.slice(1)} ${status ? 'Enabled' : 'Disabled'}`);
     } catch (error) {
       toast.error(`Failed to update ${platform} status`);
+    }
+  };
+
+  const handleCreateItem = async (itemData: {
+    name: string;
+    shortCode?: string;
+    shortCode2?: string;
+    description?: string;
+    price: number;
+    hsnCode?: string;
+    unit?: string;
+    categoryId: Id<"menuCategories">;
+    type: "veg" | "non_veg" | "egg";
+    orderTypes: string[];
+    ignoreTax: boolean;
+    ignoreDiscount: boolean;
+    isAvailable: boolean;
+    areaWisePricing?: { homeWebsite?: number; parcel?: number; swiggy?: number; zomato?: number; rapido?: number };
+  }) => {
+    if (!storeId) {
+      toast.error("No store selected");
+      return;
+    }
+    
+    try {
+      await createItem({
+        storeId: storeId as Id<"stores">,
+        ...itemData,
+      });
+      toast.success("Item added successfully");
+    } catch (error) {
+      toast.error("Failed to add item");
     }
   };
 
@@ -81,10 +115,7 @@ export default function Menu() {
           <h1 className="text-3xl font-bold tracking-tight">Menu Management</h1>
           <p className="text-muted-foreground">Manage your store menu, stock availability, and online aggregators.</p>
         </div>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" />
-          Add Item
-        </Button>
+        <MenuItemDialog categories={categories} onSubmit={handleCreateItem} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -143,6 +174,21 @@ export default function Menu() {
                   <span className="text-muted-foreground">Out of Stock</span>
                   <span className="font-medium text-destructive">{items.filter(i => !i.isAvailable).length}</span>
                 </div>
+                <div className="border-t pt-2 mt-2 space-y-1.5">
+                  <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Platform Sync</p>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground text-xs">Swiggy</span>
+                    <span className="font-medium text-orange-600 text-xs">{items.filter(i => i.onlineAvailability.swiggy).length}/{items.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground text-xs">Zomato</span>
+                    <span className="font-medium text-red-600 text-xs">{items.filter(i => i.onlineAvailability.zomato).length}/{items.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground text-xs">Rapido</span>
+                    <span className="font-medium text-yellow-600 text-xs">{items.filter(i => (i.onlineAvailability as any).rapido).length}/{items.length}</span>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -181,6 +227,19 @@ export default function Menu() {
                     </div>
                     <div className="text-right">
                       <p className="text-2xl font-bold text-primary">₹{item.price}</p>
+                      {item.areaWisePricing && (item.areaWisePricing.swiggy || item.areaWisePricing.zomato || item.areaWisePricing.rapido) && (
+                        <div className="flex flex-col items-end gap-0.5 mt-1">
+                          {item.areaWisePricing.swiggy && (
+                            <span className="text-[10px] text-orange-600">Swiggy: ₹{item.areaWisePricing.swiggy}</span>
+                          )}
+                          {item.areaWisePricing.zomato && (
+                            <span className="text-[10px] text-red-600">Zomato: ₹{item.areaWisePricing.zomato}</span>
+                          )}
+                          {item.areaWisePricing.rapido && (
+                            <span className="text-[10px] text-yellow-600">Rapido: ₹{item.areaWisePricing.rapido}</span>
+                          )}
+                        </div>
+                      )}
                       <Badge variant="secondary" className="mt-1">
                         {categories.find(c => c._id === item.categoryId)?.name || "Uncategorized"}
                       </Badge>
@@ -213,13 +272,25 @@ export default function Menu() {
 
                       <div className="flex flex-col items-center gap-1.5">
                         <span className="text-[10px] font-bold uppercase text-muted-foreground">Zomato</span>
-                        <Button 
+                        <Button
                           variant={item.onlineAvailability.zomato ? "default" : "outline"}
                           size="icon"
                           className={`w-8 h-8 ${item.onlineAvailability.zomato ? 'bg-red-500 hover:bg-red-600' : ''}`}
                           onClick={() => handleTogglePlatform(item._id, "zomato", !item.onlineAvailability.zomato)}
                         >
                           <Car className="w-4 h-4" />
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-col items-center gap-1.5">
+                        <span className="text-[10px] font-bold uppercase text-muted-foreground">Rapido</span>
+                        <Button
+                          variant={(item.onlineAvailability as any).rapido ? "default" : "outline"}
+                          size="icon"
+                          className={`w-8 h-8 ${(item.onlineAvailability as any).rapido ? 'bg-yellow-500 hover:bg-yellow-600' : ''}`}
+                          onClick={() => handleTogglePlatform(item._id, "rapido", !(item.onlineAvailability as any).rapido)}
+                        >
+                          <Zap className="w-4 h-4" />
                         </Button>
                       </div>
                     </div>

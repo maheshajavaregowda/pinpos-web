@@ -76,7 +76,7 @@ export const create = mutation({
             tableId: args.tableId,
             orderNumber: args.orderNumber,
             tokenNumber: args.tokenNumber,
-            type: args.type as "dine_in" | "takeaway" | "delivery_swiggy" | "delivery_zomato" | "delivery_direct",
+            type: args.type as "dine_in" | "takeaway" | "delivery_swiggy" | "delivery_zomato" | "delivery_rapido" | "delivery_direct",
             status: (args.status as any) || "pending",
             paymentStatus: (args.paymentStatus as any) || "pending",
             customer: args.customer,

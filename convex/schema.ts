@@ -12,9 +12,11 @@ const userRoleValidator = v.union(
 );
 
 const subscriptionStatusValidator = v.union(
+    v.literal("trialing"),
     v.literal("active"),
     v.literal("past_due"),
-    v.literal("cancelled")
+    v.literal("cancelled"),
+    v.literal("expired")
 );
 
 const tableStatusValidator = v.union(
@@ -34,7 +36,44 @@ const orderTypeValidator = v.union(
     v.literal("takeaway"),
     v.literal("delivery_swiggy"),
     v.literal("delivery_zomato"),
+    v.literal("delivery_rapido"),
     v.literal("delivery_direct")
+);
+
+// Aggregator platform validator
+const aggregatorPlatformValidator = v.union(
+    v.literal("swiggy"),
+    v.literal("zomato"),
+    v.literal("rapido")
+);
+
+// Aggregator status validator
+const aggregatorStatusValidator = v.union(
+    v.literal("active"),
+    v.literal("inactive"),
+    v.literal("error")
+);
+
+// Aggregator order status validator
+const aggregatorOrderStatusValidator = v.union(
+    v.literal("pending"),
+    v.literal("accepted"),
+    v.literal("rejected"),
+    v.literal("mapped_to_pos"),
+    v.literal("failed")
+);
+
+// Aggregator item mapping type validator
+const aggregatorMappingTypeValidator = v.union(
+    v.literal("item"),
+    v.literal("variation")
+);
+
+// Aggregator item mapping status validator
+const aggregatorItemMappingStatusValidator = v.union(
+    v.literal("mapped"),
+    v.literal("unmapped"),
+    v.literal("manual")
 );
 
 const orderStatusValidator = v.union(
@@ -113,9 +152,13 @@ export default defineSchema({
         subscription: v.object({
             planId: v.id("subscriptionPlans"),
             status: subscriptionStatusValidator,
-            currentPeriodEnd: v.optional(v.number()), // Timestamp
+            currentPeriodStart: v.optional(v.number()),
+            currentPeriodEnd: v.optional(v.number()),
+            trialEndsAt: v.optional(v.number()),
             stripeCustomerId: v.optional(v.string()),
-            features: v.optional(v.array(v.string())), // Feature overrides
+            razorpayCustomerId: v.optional(v.string()),
+            razorpaySubscriptionId: v.optional(v.string()),
+            features: v.optional(v.array(v.string())),
         }),
     }).index("by_owner", ["ownerId"]),
 
@@ -131,6 +174,46 @@ export default defineSchema({
         }),
         features: v.array(v.string()), // ['ai_insights', 'inventory', 'loyalty']
     }),
+
+    // 2b. Subscription Unlock Codes (Admin-generated temporary extensions)
+    subscriptionUnlockCodes: defineTable({
+        code: v.string(),
+        orgId: v.optional(v.id("organizations")),
+        createdBy: v.string(),
+        extensionDays: v.number(),
+        isUsed: v.boolean(),
+        usedBy: v.optional(v.id("organizations")),
+        usedAt: v.optional(v.number()),
+        expiresAt: v.number(),
+        createdAt: v.number(),
+    })
+        .index("by_code", ["code"])
+        .index("by_org", ["orgId"]),
+
+    // 2c. Subscription Payments (Payment history / invoices)
+    subscriptionPayments: defineTable({
+        orgId: v.id("organizations"),
+        razorpayOrderId: v.string(),
+        razorpayPaymentId: v.optional(v.string()),
+        amount: v.number(),
+        currency: v.string(),
+        planType: v.union(v.literal("monthly"), v.literal("yearly")),
+        status: v.union(
+            v.literal("created"),
+            v.literal("captured"),
+            v.literal("failed"),
+            v.literal("refunded")
+        ),
+        periodStart: v.optional(v.number()),
+        periodEnd: v.optional(v.number()),
+        receipt: v.optional(v.string()),
+        razorpaySignature: v.optional(v.string()),
+        failureReason: v.optional(v.string()),
+        createdAt: v.number(),
+        updatedAt: v.number(),
+    })
+        .index("by_org", ["orgId"])
+        .index("by_razorpay_order", ["razorpayOrderId"]),
 
     // 3. Stores (Physical Locations)
     stores: defineTable({
@@ -150,6 +233,7 @@ export default defineSchema({
             v.object({
                 swiggyId: v.optional(v.string()),
                 zomatoId: v.optional(v.string()),
+                rapidoId: v.optional(v.string()),
             })
         ),
     })
@@ -171,6 +255,15 @@ export default defineSchema({
         storeId: v.id("stores"),
         name: v.string(),
         description: v.optional(v.string()),
+        sortOrder: v.number(),
+        isActive: v.boolean(),
+    }).index("by_store", ["storeId"]),
+
+    // 4b. Counters (Kitchen Stations)
+    counters: defineTable({
+        storeId: v.id("stores"),
+        name: v.string(),
+        printerId: v.optional(v.string()),
         sortOrder: v.number(),
         isActive: v.boolean(),
     }).index("by_store", ["storeId"]),
@@ -199,15 +292,18 @@ export default defineSchema({
         unit: v.optional(v.string()),
         ignoreTax: v.optional(v.boolean()),
         ignoreDiscount: v.optional(v.boolean()),
+        counterId: v.optional(v.id("counters")),
         areaWisePricing: v.optional(v.object({
             homeWebsite: v.optional(v.number()),
             parcel: v.optional(v.number()),
             swiggy: v.optional(v.number()),
             zomato: v.optional(v.number()),
+            rapido: v.optional(v.number()),
         })),
         onlineAvailability: v.optional(v.object({
             swiggy: v.boolean(),
             zomato: v.boolean(),
+            rapido: v.optional(v.boolean()),
         })),
         imageUrl: v.optional(v.string()),
         hasVariations: v.optional(v.boolean()),
@@ -279,6 +375,9 @@ export default defineSchema({
         aggregator: v.optional(
             v.object({
                 aggregatorOrderId: v.optional(v.string()),
+                platform: v.optional(v.string()),
+                deliveryPartnerName: v.optional(v.string()),
+                deliveryPartnerPhone: v.optional(v.string()),
             })
         ),
         subtotal: v.number(),
@@ -376,4 +475,94 @@ export default defineSchema({
         linkedAt: v.optional(v.number()),
     }).index("by_code", ["code"])
         .index("by_store", ["storeId"]),
+
+    // ============================================
+    // AGGREGATOR INTEGRATION TABLES
+    // ============================================
+
+    // 14. Aggregators (Platform Configuration per Store)
+    aggregators: defineTable({
+        storeId: v.id("stores"),
+        platform: aggregatorPlatformValidator,
+        isEnabled: v.boolean(),
+        credentials: v.object({
+            apiKey: v.optional(v.string()),
+            apiSecret: v.optional(v.string()),
+            restaurantId: v.optional(v.string()),
+            webhookSecret: v.optional(v.string()),
+        }),
+        webhookUrl: v.optional(v.string()),
+        status: aggregatorStatusValidator,
+        lastSyncAt: v.optional(v.number()),
+    })
+        .index("by_store", ["storeId"])
+        .index("by_store_platform", ["storeId", "platform"]),
+
+    // 15. Aggregator Item Mappings (Menu Item Mappings)
+    aggregatorItemMappings: defineTable({
+        storeId: v.id("stores"),
+        aggregatorId: v.id("aggregators"),
+        platform: aggregatorPlatformValidator,
+        aggregatorItemId: v.string(),
+        aggregatorItemName: v.string(),
+        aggregatorCategory: v.optional(v.string()),
+        posItemId: v.optional(v.id("menuItems")),
+        posVariationId: v.optional(v.id("itemVariations")),
+        mappingType: aggregatorMappingTypeValidator,
+        isActive: v.boolean(),
+    })
+        .index("by_store", ["storeId"])
+        .index("by_aggregator", ["aggregatorId"])
+        .index("by_aggregator_item", ["aggregatorId", "aggregatorItemId"]),
+
+    // 16. Aggregator Category Mappings (Category to Counter Mappings)
+    aggregatorCategoryMappings: defineTable({
+        storeId: v.id("stores"),
+        aggregatorId: v.id("aggregators"),
+        platform: aggregatorPlatformValidator,
+        aggregatorCategoryId: v.string(),
+        aggregatorCategoryName: v.string(),
+        counterId: v.optional(v.id("counters")),
+        isActive: v.boolean(),
+    })
+        .index("by_store", ["storeId"])
+        .index("by_aggregator", ["aggregatorId"]),
+
+    // 17. Aggregator Orders (Incoming Orders Queue)
+    aggregatorOrders: defineTable({
+        storeId: v.id("stores"),
+        aggregatorId: v.id("aggregators"),
+        platform: aggregatorPlatformValidator,
+        aggregatorOrderId: v.string(),
+        aggregatorOrderNumber: v.string(),
+        status: aggregatorOrderStatusValidator,
+        posOrderId: v.optional(v.id("orders")),
+        customer: v.object({
+            name: v.optional(v.string()),
+            phone: v.optional(v.string()),
+            address: v.optional(v.string()),
+        }),
+        items: v.array(v.object({
+            aggregatorItemId: v.string(),
+            name: v.string(),
+            quantity: v.number(),
+            price: v.number(),
+            posItemId: v.optional(v.id("menuItems")),
+            posVariationId: v.optional(v.id("itemVariations")),
+            mappingStatus: aggregatorItemMappingStatusValidator,
+        })),
+        subtotal: v.number(),
+        tax: v.optional(v.number()),
+        deliveryFee: v.optional(v.number()),
+        discount: v.optional(v.number()),
+        total: v.number(),
+        estimatedTime: v.optional(v.number()),
+        rawPayload: v.optional(v.string()),
+        createdAt: v.number(),
+        acceptedAt: v.optional(v.number()),
+        errorMessage: v.optional(v.string()),
+    })
+        .index("by_store", ["storeId"])
+        .index("by_store_status", ["storeId", "status"])
+        .index("by_aggregator_order", ["aggregatorId", "aggregatorOrderId"]),
 });

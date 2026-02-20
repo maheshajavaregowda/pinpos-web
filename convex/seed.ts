@@ -38,13 +38,17 @@ export const seed = mutation({
             passwordHash: "password123", // MVP plaintext
         });
 
-        // Create organization
+        // Create organization with 30-day free trial
+        const now = Date.now();
+        const trialDurationMs = 30 * 24 * 60 * 60 * 1000; // 30 days
         const orgId = await ctx.db.insert("organizations", {
             name: "Demo Restaurant",
             ownerId: userId,
             subscription: {
                 planId: planId,
-                status: "active",
+                status: "trialing",
+                currentPeriodStart: now,
+                trialEndsAt: now + trialDurationMs,
             },
         });
 
@@ -123,13 +127,13 @@ export const seed = mutation({
                 onlineAvailability: {
                     swiggy: true,
                     zomato: true,
+                    rapido: true,
                 },
             });
             menuItemIds[item.name] = id;
         }
 
         // Create sample orders
-        const now = Date.now();
         const orderTypes = ["dine_in", "takeaway", "delivery_swiggy"] as const;
         const statuses = ["pending", "cooking", "ready", "completed"] as const;
 

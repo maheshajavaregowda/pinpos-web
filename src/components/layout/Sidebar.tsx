@@ -1,16 +1,18 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { 
-  LayoutDashboard, 
-  ShoppingCart, 
-  Package, 
-  BarChart3, 
+import {
+  LayoutDashboard,
+  ShoppingCart,
+  Package,
+  BarChart3,
   Settings,
   Building2,
   LogOut,
   Monitor,
   ChefHat,
-  Users
+  Users,
+  Link2,
+  CreditCard
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -31,6 +33,8 @@ export const Sidebar = ({ className }: SidebarProps) => {
     { id: 'kitchen', label: 'Kitchen Display', icon: ChefHat, path: '/kitchen', roles: ['owner', 'crew'] },
     { id: 'crew', label: 'Crew HQ', icon: Users, path: '/crew', roles: ['owner'] },
     { id: 'devices', label: 'Linked Devices', icon: Monitor, path: '/devices', roles: ['owner'] },
+    { id: 'integrations', label: 'Integrations', icon: Link2, path: '/integrations', roles: ['owner'] },
+    { id: 'billing', label: 'Billing', icon: CreditCard, path: '/billing', roles: ['owner'] },
     { id: 'reports', label: 'Reports', icon: BarChart3, path: '/reports', roles: ['owner'] },
     { id: 'settings', label: 'Settings', icon: Settings, path: '/settings', roles: ['owner'] },
   ];

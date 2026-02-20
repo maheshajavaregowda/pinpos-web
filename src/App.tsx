@@ -6,6 +6,8 @@ import Kitchen from "@/pages/Kitchen";
 import Devices from "@/pages/Devices";
 import Crew from "@/pages/Crew";
 import Menu from "@/pages/Menu";
+import Integrations from "@/pages/Integrations";
+import Billing from "@/pages/Billing";
 import Terminal from "@/pages/Terminal";
 import NotFound from "@/pages/NotFound";
 import RequireAuth from "./features/auth/RequireAuth";
@@ -53,6 +55,20 @@ function App() {
           <RequireAuth>
             <DashboardLayout>
               <Menu />
+            </DashboardLayout>
+          </RequireAuth>
+        } />
+        <Route path="/integrations" element={
+          <RequireAuth>
+            <DashboardLayout>
+              <Integrations />
+            </DashboardLayout>
+          </RequireAuth>
+        } />
+        <Route path="/billing" element={
+          <RequireAuth>
+            <DashboardLayout>
+              <Billing />
             </DashboardLayout>
           </RequireAuth>
         } />

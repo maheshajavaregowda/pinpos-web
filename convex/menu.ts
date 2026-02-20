@@ -27,7 +27,7 @@ export const getItems = query({
         return items.map(item => ({
             ...item,
             isAvailable: item.isAvailable ?? true,
-            onlineAvailability: item.onlineAvailability ?? { swiggy: true, zomato: true }
+            onlineAvailability: item.onlineAvailability ?? { swiggy: true, zomato: true, rapido: true }
         }));
     },
 });
@@ -66,10 +66,24 @@ export const createItem = mutation({
         storeId: v.id("stores"),
         categoryId: v.id("menuCategories"),
         name: v.string(),
+        shortCode: v.optional(v.string()),
+        shortCode2: v.optional(v.string()),
         description: v.optional(v.string()),
         price: v.number(),
+        hsnCode: v.optional(v.string()),
+        unit: v.optional(v.string()),
         type: v.string(),
+        orderTypes: v.optional(v.array(v.string())),
+        ignoreTax: v.optional(v.boolean()),
+        ignoreDiscount: v.optional(v.boolean()),
         isAvailable: v.optional(v.boolean()),
+        areaWisePricing: v.optional(v.object({
+            homeWebsite: v.optional(v.number()),
+            parcel: v.optional(v.number()),
+            swiggy: v.optional(v.number()),
+            zomato: v.optional(v.number()),
+            rapido: v.optional(v.number()),
+        })),
         imageUrl: v.optional(v.string()),
     },
     handler: async (ctx, args) => {
@@ -77,14 +91,23 @@ export const createItem = mutation({
             storeId: args.storeId,
             categoryId: args.categoryId,
             name: args.name,
+            shortCode: args.shortCode,
+            shortCode2: args.shortCode2,
             description: args.description,
             price: args.price,
+            hsnCode: args.hsnCode,
+            unit: args.unit,
             type: args.type as "veg" | "non_veg" | "egg",
+            orderTypes: args.orderTypes ?? ["dine_in", "takeaway", "delivery"],
+            ignoreTax: args.ignoreTax ?? false,
+            ignoreDiscount: args.ignoreDiscount ?? false,
             isAvailable: args.isAvailable ?? true,
             onlineAvailability: {
                 swiggy: true,
                 zomato: true,
+                rapido: true,
             },
+            areaWisePricing: args.areaWisePricing,
             imageUrl: args.imageUrl,
         });
     },
@@ -115,6 +138,7 @@ export const updateItem = mutation({
         onlineAvailability: v.optional(v.object({
             swiggy: v.boolean(),
             zomato: v.boolean(),
+            rapido: v.optional(v.boolean()),
         })),
     },
     handler: async (ctx, args) => {
@@ -144,16 +168,20 @@ export const toggleCategoryAvailability = mutation({
 export const updateOnlineAvailability = mutation({
     args: {
         itemId: v.id("menuItems"),
-        platform: v.union(v.literal("swiggy"), v.literal("zomato")),
+        platform: v.union(v.literal("swiggy"), v.literal("zomato"), v.literal("rapido")),
         isAvailable: v.boolean(),
     },
     handler: async (ctx, args) => {
         const item = await ctx.db.get(args.itemId);
         if (!item) throw new Error("Item not found");
 
-        const onlineAvailability = item.onlineAvailability ? { ...item.onlineAvailability } : { swiggy: true, zomato: true };
-        if (args.platform === "swiggy") onlineAvailability.swiggy = args.isAvailable;
-        if (args.platform === "zomato") onlineAvailability.zomato = args.isAvailable;
+        const onlineAvailability = item.onlineAvailability
+            ? { ...item.onlineAvailability }
+            : { swiggy: true, zomato: true, rapido: true };
+        if (!("rapido" in onlineAvailability)) {
+            (onlineAvailability as any).rapido = true;
+        }
+        (onlineAvailability as any)[args.platform] = args.isAvailable;
 
         await ctx.db.patch(args.itemId, { onlineAvailability });
     },
